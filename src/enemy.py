@@ -115,7 +115,8 @@ class Enemy:
         self.maze_width = maze_width
         self.maze_height = maze_height
         self.maze = maze
-        self.vision_range = 5 * cell_size
+        # Giảm khoảng cách phát hiện xuống 1/3 (từ 100 * cell_size xuống 33 * cell_size)
+        self.vision_range = 33 * cell_size
         self.base_speed = self.speed
         self.target_pos = None
         self.current_grid_pos = (y, x)
@@ -262,14 +263,17 @@ class Enemy:
         end_grid_x = int(end_x // self.cell_size)
         end_grid_y = int(end_y // self.cell_size)
 
+        # Kiểm tra xem điểm bắt đầu và điểm kết thúc có nằm ngoài mê cung không
         if not (0 <= start_grid_y < self.maze_height and 0 <= start_grid_x < self.maze_width and
                 0 <= end_grid_y < self.maze_height and 0 <= end_grid_x < self.maze_width):
             return False
 
+        # Kiểm tra xem điểm bắt đầu hoặc điểm kết thúc có phải là tường không
         if (self.maze[start_grid_y][start_grid_x] == 1 or
                 self.maze[end_grid_y][end_grid_x] == 1):
             return False
 
+        # Thuật toán Bresenham để kiểm tra các ô trên đường đi
         dx = abs(end_grid_x - start_grid_x)
         dy = abs(end_grid_y - start_grid_y)
         sx = 1 if start_grid_x < end_grid_x else -1
@@ -331,19 +335,22 @@ class Enemy:
         current_time = pygame.time.get_ticks()
         player_grid_pos = (player_pos[0], player_pos[1])
 
+        # Tính khoảng cách đến người chơi (dùng pixel)
         dx = self.rect.x - (player_pos[1] * self.cell_size)
         dy = self.rect.y - (player_pos[0] * self.cell_size)
         distance_to_player_px = math.sqrt(dx**2 + dy**2)
 
+        # Cập nhật trạng thái đuổi theo
         if distance_to_player_px <= self.vision_range:
             self.show_exclamation = True
-            self.speed = self.base_speed * 0.4 if self.enemy_type == "skeleton" else self.base_speed * 1.2
+            self.speed = self.base_speed * 0.4 if self.enemy_type == "skeleton" else self.base_speed * 2.4
             self.move_delay = 60
         else:
             self.show_exclamation = False
             self.speed = self.base_speed
             self.move_delay = 500
 
+        # Cập nhật các trạng thái khác
         self.update_visibility()
         self.update_bounce()
         self.attack(player_pos)
@@ -353,10 +360,12 @@ class Enemy:
         self.update_stomp_warning()
         self.update_shockwave()
 
+        # Cập nhật vị trí lưới hiện tại của quái vật
         current_grid_x = int(self.rect.x // self.cell_size)
         current_grid_y = int(self.rect.y // self.cell_size)
         self.current_grid_pos = (current_grid_y, current_grid_x)
 
+        # Nếu quái vật đang đứng trên ô tường, di chuyển nó đến ô hợp lệ gần nhất
         if (0 <= current_grid_y < self.maze_height and 0 <= current_grid_x < self.maze_width and
                 self.maze[current_grid_y][current_grid_x] == 1):
             new_x, new_y = self.find_nearest_valid_position()
@@ -366,87 +375,115 @@ class Enemy:
             self.target_pos = None
             return
 
-        if self.target_pos:
-            if self.check_path(self.rect.x, self.rect.y, self.target_pos[0], self.target_pos[1]):
-                dx = self.target_pos[0] - self.rect.x
-                dy = self.target_pos[1] - self.rect.y
-                distance = math.sqrt(dx**2 + dy**2)
-
-                if distance > 1:
-                    speed_per_frame = self.speed / 60
-                    if distance <= speed_per_frame:
-                        self.rect.x = self.target_pos[0]
-                        self.rect.y = self.target_pos[1]
-                        self.current_grid_pos = (int(self.target_pos[1] // self.cell_size),
-                                                int(self.target_pos[0] // self.cell_size))
-                        self.target_pos = None
-                    else:
-                        direction_x = dx / distance
-                        direction_y = dy / distance
-                        new_x = self.rect.x + direction_x * speed_per_frame
-                        new_y = self.rect.y + direction_y * speed_per_frame
-                        if self.check_path(self.rect.x, self.rect.y, new_x, new_y):
-                            self.rect.x = new_x
-                            self.rect.y = new_y
-                            self.current_grid_pos = (int(new_y // self.cell_size),
-                                                    int(new_x // self.cell_size))
-                            if direction_x > 0:
-                                self.facing_right = True
-                                self.image = self.original_image
-                            elif direction_x < 0:
-                                self.facing_right = False
-                                self.image = pygame.transform.flip(self.original_image, True, False)
-                        else:
-                            self.target_pos = None
-                else:
-                    self.rect.x = self.target_pos[0]
-                    self.rect.y = self.target_pos[1]
-                    self.current_grid_pos = (int(self.target_pos[1] // self.cell_size),
-                                            int(self.target_pos[0] // self.cell_size))
-                    self.target_pos = None
-            else:
-                self.target_pos = None
-
+        # Nếu không có target_pos và đã đến lúc di chuyển
         if self.target_pos is None and current_time - self.last_move >= self.move_delay:
             self.last_move = current_time
 
             enemy_grid_pos = self.current_grid_pos
 
+            # Xác định hướng di chuyển
             if self.enemy_type == "skeleton":
+                # Skeleton di chuyển ngẫu nhiên
                 directions = [(0, 1), (0, -1), (1, 0), (-1, 0)]
                 random.shuffle(directions)
             else:
+                # Các quái vật khác đuổi theo người chơi nếu trong tầm nhìn
                 if distance_to_player_px <= self.vision_range:
                     directions = []
-                    if player_grid_pos[1] < enemy_grid_pos[1]:
-                        directions.append((-1, 0))
-                    elif player_grid_pos[1] > enemy_grid_pos[1]:
-                        directions.append((1, 0))
-                    if player_grid_pos[0] < enemy_grid_pos[0]:
-                        directions.append((0, -1))
-                    elif player_grid_pos[0] > enemy_grid_pos[0]:
-                        directions.append((0, 1))
+                    # Ưu tiên hướng gần người chơi nhất
+                    dx = player_grid_pos[1] - enemy_grid_pos[1]
+                    dy = player_grid_pos[0] - enemy_grid_pos[0]
+                    # Ưu tiên theo trục có khoảng cách lớn hơn
+                    if abs(dx) > abs(dy):
+                        if dx < 0:
+                            directions.append((-1, 0))  # Trái
+                        elif dx > 0:
+                            directions.append((1, 0))   # Phải
+                        if dy < 0:
+                            directions.append((0, -1))  # Lên
+                        elif dy > 0:
+                            directions.append((0, 1))   # Xuống
+                    else:
+                        if dy < 0:
+                            directions.append((0, -1))  # Lên
+                        elif dy > 0:
+                            directions.append((0, 1))   # Xuống
+                        if dx < 0:
+                            directions.append((-1, 0))  # Trái
+                        elif dx > 0:
+                            directions.append((1, 0))   # Phải
+                    # Thêm các hướng còn lại để thử nếu hướng ưu tiên không đi được
                     all_directions = [(0, 1), (0, -1), (1, 0), (-1, 0)]
                     for direction in all_directions:
                         if direction not in directions:
                             directions.append(direction)
                 else:
+                    # Di chuyển ngẫu nhiên nếu không thấy người chơi
                     directions = [(0, 1), (0, -1), (1, 0), (-1, 0)]
                     random.shuffle(directions)
 
+            # Thử di chuyển theo các hướng đã chọn
             moved = False
             new_grid_x, new_grid_y = enemy_grid_pos[1], enemy_grid_pos[0]
 
             for dx, dy in directions:
-                next_x, next_y = enemy_grid_pos[1] + dx, enemy_grid_pos[0] + dy
+                next_x = enemy_grid_pos[1] + dx
+                next_y = enemy_grid_pos[0] + dy
+                # Kiểm tra xem ô tiếp theo có hợp lệ không
                 if (0 <= next_y < self.maze_height and 0 <= next_x < self.maze_width and
                         self.maze[next_y][next_x] == 0):
-                    new_grid_x, new_grid_y = next_x, next_y
-                    moved = True
-                    break
+                    # Kiểm tra đường đi từ vị trí hiện tại đến ô tiếp theo
+                    target_x = next_x * self.cell_size
+                    target_y = next_y * self.cell_size
+                    if self.check_path(self.rect.x, self.rect.y, target_x, target_y):
+                        new_grid_x, new_grid_y = next_x, next_y
+                        moved = True
+                        break
 
             if moved:
                 self.target_pos = (new_grid_x * self.cell_size, new_grid_y * self.cell_size)
+            else:
+                self.target_pos = None  # Nếu không tìm được hướng hợp lệ, không di chuyển
+
+        # Di chuyển đến target_pos nếu có
+        if self.target_pos:
+            dx = self.target_pos[0] - self.rect.x
+            dy = self.target_pos[1] - self.rect.y
+            distance = math.sqrt(dx**2 + dy**2)
+
+            if distance > 1:
+                speed_per_frame = self.speed / 60
+                if distance <= speed_per_frame:
+                    self.rect.x = self.target_pos[0]
+                    self.rect.y = self.target_pos[1]
+                    self.current_grid_pos = (int(self.target_pos[1] // self.cell_size),
+                                            int(self.target_pos[0] // self.cell_size))
+                    self.target_pos = None
+                else:
+                    direction_x = dx / distance
+                    direction_y = dy / distance
+                    new_x = self.rect.x + direction_x * speed_per_frame
+                    new_y = self.rect.y + direction_y * speed_per_frame
+                    # Kiểm tra đường đi từng bước nhỏ để tránh xuyên tường
+                    if self.check_path(self.rect.x, self.rect.y, new_x, new_y):
+                        self.rect.x = new_x
+                        self.rect.y = new_y
+                        self.current_grid_pos = (int(new_y // self.cell_size),
+                                                int(new_x // self.cell_size))
+                        if direction_x > 0:
+                            self.facing_right = True
+                            self.image = self.original_image
+                        elif direction_x < 0:
+                            self.facing_right = False
+                            self.image = pygame.transform.flip(self.original_image, True, False)
+                    else:
+                        self.target_pos = None
+            else:
+                self.rect.x = self.target_pos[0]
+                self.rect.y = self.target_pos[1]
+                self.current_grid_pos = (int(self.target_pos[1] // self.cell_size),
+                                        int(self.target_pos[0] // self.cell_size))
+                self.target_pos = None
 
     def draw(self, screen, offset=(0, 0)):
         if self.is_visible:
@@ -455,7 +492,6 @@ class Enemy:
             draw_rect.y -= offset[1] + self.bounce_offset
             screen.blit(self.image, draw_rect)
             if self.show_exclamation:
-                # Sửa vị trí dấu chấm than để cố định trên đầu quái vật
                 exclamation_pos = (
                     draw_rect.centerx - self.exclamation_mark.get_width() // 2,
                     draw_rect.top - self.exclamation_mark.get_height()
