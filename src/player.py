@@ -1,10 +1,12 @@
+# player.py
 import pygame
 from bullet import Bullet
+
 
 class Player:
     def __init__(self, x, y, maze=None, image_path=None):
         print(f"Khởi tạo Player tại vị trí ({x}, {y})")
-        
+
         self.maze = maze
 
         self.walk_frames = {
@@ -45,7 +47,8 @@ class Player:
             walkA_path = f"assets/images/hero/walkA/hero_walkA_{str(i).zfill(4)}.png"
             try:
                 frame = pygame.image.load(walkA_path)
-                frame = pygame.transform.scale(frame, (tile_width, tile_height))
+                frame = pygame.transform.scale(
+                    frame, (tile_width, tile_height))
                 self.walk_frames["down"].append(frame)
             except pygame.error as e:
                 print(f"Không thể tải frame {walkA_path}: {e}")
@@ -56,7 +59,8 @@ class Player:
             walkB_path = f"assets/images/hero/walkB/hero_walkB_{str(i).zfill(4)}.png"
             try:
                 frame = pygame.image.load(walkB_path)
-                frame = pygame.transform.scale(frame, (tile_width, tile_height))
+                frame = pygame.transform.scale(
+                    frame, (tile_width, tile_height))
                 self.walk_frames["right"].append(frame)
             except pygame.error as e:
                 print(f"Không thể tải frame {walkB_path}: {e}")
@@ -67,7 +71,8 @@ class Player:
             walkC_path = f"assets/images/hero/walkC/hero_walkC_{str(i).zfill(4)}.png"
             try:
                 frame = pygame.image.load(walkC_path)
-                frame = pygame.transform.scale(frame, (tile_width, tile_height))
+                frame = pygame.transform.scale(
+                    frame, (tile_width, tile_height))
                 self.walk_frames["up"].append(frame)
             except pygame.error as e:
                 print(f"Không thể tải frame {walkC_path}: {e}")
@@ -78,7 +83,8 @@ class Player:
             walkD_path = f"assets/images/hero/walkD/hero_walkD_{str(i).zfill(4)}.png"
             try:
                 frame = pygame.image.load(walkD_path)
-                frame = pygame.transform.scale(frame, (tile_width, tile_height))
+                frame = pygame.transform.scale(
+                    frame, (tile_width, tile_height))
                 self.walk_frames["left"].append(frame)
             except pygame.error as e:
                 print(f"Không thể tải frame {walkD_path}: {e}")
@@ -181,13 +187,15 @@ class Player:
         self._update_image()
 
     def _update_image(self):
-        current_animation_speed = self.animation_speed * 2 if self.is_rolling else self.animation_speed
+        current_animation_speed = self.animation_speed * \
+            2 if self.is_rolling else self.animation_speed
 
         if self.is_moving or self.is_rolling:
             self.frame_index += current_animation_speed
             if self.frame_index >= len(self.walk_frames[self.direction]):
                 self.frame_index = 0
-            self.image = self.walk_frames[self.direction][int(self.frame_index)]
+            self.image = self.walk_frames[self.direction][int(
+                self.frame_index)]
         else:
             self.frame_index = 0
             self.image = self.walk_frames[self.direction][0]
@@ -206,7 +214,8 @@ class Player:
                 self.rect.centery,
                 image_path="assets/images/bullet/bullet.png",
                 direction=self.direction,
-                maze=self.maze
+                maze=self.maze,
+                damage=4  # Đổi sát thương từ 10 thành 4
             )
             self.bullet_list.append(bullet)
             self.bullets -= 1
@@ -223,14 +232,17 @@ class Player:
         print(f"Nhặt thêm {amount} đạn. Tổng đạn: {self.bullets}")
 
     def draw(self, screen, offset=(0, 0)):
-        screen.blit(self.image, (self.rect.x - offset[0], self.rect.y - offset[1]))
+        screen.blit(self.image, (self.rect.x -
+                    offset[0], self.rect.y - offset[1]))
 
         if not self.is_rolling:
             health_ratio = self.health / self.max_health
             current_width = self.health_bar_width * health_ratio
-            health_bar_x = self.rect.centerx - self.health_bar_width // 2 - offset[0]
+            health_bar_x = self.rect.centerx - \
+                self.health_bar_width // 2 - offset[0]
             health_bar_y = self.rect.top - self.health_bar_offset - offset[1]
-            pygame.draw.rect(screen, (255, 0, 0), (health_bar_x, health_bar_y, current_width, self.health_bar_height))
+            pygame.draw.rect(screen, (255, 0, 0), (health_bar_x,
+                             health_bar_y, current_width, self.health_bar_height))
 
         for bullet in self.bullet_list:
             bullet.draw(screen, offset=offset)

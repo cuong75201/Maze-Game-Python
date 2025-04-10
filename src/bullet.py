@@ -1,7 +1,10 @@
+# bullet.py
 import pygame
 
+
 class Bullet:
-    def __init__(self, x, y, image_path, direction, maze=None):
+    # Đổi damage mặc định thành 4
+    def __init__(self, x, y, image_path, direction, maze=None, damage=4):
         try:
             self.image = pygame.image.load(image_path)
             self.image = pygame.transform.scale(self.image, (20, 20))
@@ -14,6 +17,7 @@ class Bullet:
         self.direction = direction
         self.speed = 10
         self.maze = maze
+        self.damage = damage  # Thêm thuộc tính sát thương
 
     def move(self):
         if self.direction == "up":
@@ -43,4 +47,5 @@ class Bullet:
         return self.move()
 
     def draw(self, screen, offset=(0, 0)):
-        screen.blit(self.image, (self.rect.x - offset[0], self.rect.y - offset[1]))
+        screen.blit(self.image, (self.rect.x -
+                    offset[0], self.rect.y - offset[1]))
