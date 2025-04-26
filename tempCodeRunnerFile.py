@@ -1,4 +1,1 @@
-   try: 
-            self.tilemap.load('map1.json')
-        except FileNotFoundError:
-            pass
+ self.tilemap.render(self.display, render_scroll)
