@@ -49,15 +49,14 @@ except pygame.error as e:
 
 ICON_X, ICON_Y = 10, HEIGHT - 100
 AMMO_ICON_X, AMMO_ICON_Y = ICON_X, ICON_Y + 50  # Vị trí hình hộp đạn
-AMMO_TEXT_X, AMMO_TEXT_Y = AMMO_ICON_X + \
-    40, AMMO_ICON_Y + 5  # Vị trí văn bản số đạn
+AMMO_TEXT_X, AMMO_TEXT_Y = AMMO_ICON_X + 40, AMMO_ICON_Y + 5  # Vị trí văn bản số đạn
 # Vị trí văn bản HP (bên cạnh icon nhân vật)
 HP_TEXT_X, HP_TEXT_Y = ICON_X + 51, ICON_Y + 15
 
 font = pygame.font.Font(None, 36)
 clock = pygame.time.Clock()
 FPS = 60
-
+ 
 TILE_SIZE = (17, 12)
 
 game_assets = {
@@ -93,8 +92,7 @@ class AmmoBox:
         self.ammo_amount = 15
 
     def draw(self, screen, offset=(0, 0)):
-        screen.blit(self.image, (self.rect.x -
-                    offset[0], self.rect.y - offset[1]))
+        screen.blit(self.image, (self.rect.x - offset[0], self.rect.y - offset[1]))
 
 
 def is_position_valid(maze, x, y, rect):
@@ -149,8 +147,7 @@ def find_valid_starting_position(maze, size, occupied_positions, maze_width, maz
         for occ_x, occ_y in occupied_positions:
             occ_grid_x = occ_x // tile_size[0]
             occ_grid_y = occ_y // tile_size[1]
-            distance = math.sqrt((grid_x - occ_grid_x) **
-                                 2 + (grid_y - occ_grid_y) ** 2)
+            distance = math.sqrt((grid_x - occ_grid_x) ** 2 + (grid_y - occ_grid_y) ** 2)
             if distance < min_distance:
                 too_close = True
                 break
@@ -162,13 +159,11 @@ def find_valid_starting_position(maze, size, occupied_positions, maze_width, maz
         if attempts == 50 and min_distance > 1:
             min_distance -= 1
             attempts = 0
-            print(
-                f"Giảm min_distance xuống {min_distance} để tìm vị trí spawn")
+            print(f"Giảm min_distance xuống {min_distance} để tìm vị trí spawn")
 
     for pixel_x, pixel_y in valid_positions:
         if is_position_valid(maze, pixel_x, pixel_y, temp_rect):
-            print(
-                f"Không thể tìm vị trí với min_distance, sử dụng vị trí hợp lệ tại ({pixel_x}, {pixel_y})")
+            print(f"Không thể tìm vị trí với min_distance, sử dụng vị trí hợp lệ tại ({pixel_x}, {pixel_y})")
             return pixel_x, pixel_y
 
     raise ValueError("Không tìm thấy vị trí hợp lệ nào để đặt nhân vật!")
@@ -190,10 +185,8 @@ player = Player(player_x, player_y, maze=maze)
 
 
 def convert_tilemap_to_maze(maze):
-    maze_width = max([int(loc.split(';')[0])
-                     for loc in maze.tilemap.keys()]) + 1
-    maze_height = max([int(loc.split(';')[1])
-                      for loc in maze.tilemap.keys()]) + 1
+    maze_width = max([int(loc.split(';')[0]) for loc in maze.tilemap.keys()]) + 1
+    maze_height = max([int(loc.split(';')[1]) for loc in maze.tilemap.keys()]) + 1
     grid = [[1 for _ in range(maze_width)] for _ in range(maze_height)]
     for loc, tile in maze.tilemap.items():
         x, y = map(int, loc.split(';'))
@@ -210,8 +203,7 @@ maze_grid, maze_width, maze_height = convert_tilemap_to_maze(maze)
 enemies = []
 occupied_positions = []
 
-enemy_list = ["slime", "slime", "slime", "slime", "skeleton",
-              "skeleton", "zombie", "zombie", "ghost", "ghost", "giant"]
+enemy_list = ["slime", "slime", "slime", "slime", "skeleton", "skeleton", "zombie", "zombie", "ghost", "ghost", "giant"]
 
 for enemy_type in enemy_list:
     try:
@@ -246,6 +238,8 @@ PLAYER_MAX_BULLETS = 150
 
 running = True
 while running:
+    dt = clock.tick(FPS) / 1000  # Tính dt (thời gian giữa các frame, tính bằng giây)
+
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
@@ -280,35 +274,46 @@ while running:
     for ammo_box in ammo_boxes[:]:
         if player.rect.colliderect(ammo_box.rect):
             if player.bullets < PLAYER_MAX_BULLETS:
-                ammo_to_add = min(ammo_box.ammo_amount,
-                                  PLAYER_MAX_BULLETS - player.bullets)
+                ammo_to_add = min(ammo_box.ammo_amount, PLAYER_MAX_BULLETS - player.bullets)
                 player.bullets += ammo_to_add
-                print(
-                    f"Nhặt hộp đạn, cộng {ammo_to_add} đạn. Tổng đạn: {player.bullets}")
+                print(f"Nhặt hộp đạn, cộng {ammo_to_add} đạn. Tổng đạn: {player.bullets}")
             ammo_boxes.remove(ammo_box)
 
     for enemy in enemies[:]:
-        enemy.move(player_pos, player.rect)
+        enemy.move(player_pos, player.rect, dt)  # Truyền dt vào move
+
+        # Kiểm tra va chạm giữa quái vật và người chơi
+        if enemy.is_visible and enemy.rect.colliderect(player.rect):
+            player.health -= 50  # Trừ nửa cây máu (50 HP) khi quái vật chạm
+            if player.health <= 0:
+                running = False
+                print("Người chơi đã bị hạ gục!")
+            # Tạm dừng ngắn để tránh trừ máu liên tục
+            enemy.rect.x += (enemy.rect.centerx - player.rect.centerx) * 0.1
+            enemy.rect.y += (enemy.rect.centery - player.rect.centery) * 0.1
 
         for bullet in player.bullet_list[:]:
             if enemy.is_visible and bullet.rect.colliderect(enemy.rect):
                 enemy.hp -= bullet.damage
-                enemy.create_particles(
-                    bullet.rect.centerx, bullet.rect.centery, (255, 255, 0))
+                enemy.create_particles(bullet.rect.centerx, bullet.rect.centery, (255, 255, 0))
                 player.bullet_list.remove(bullet)
                 if enemy.hp <= 0:
                     enemies.remove(enemy)
-                    enemy.create_particles(
-                        enemy.rect.centerx, enemy.rect.centery, (255, 0, 0))
+                    enemy.create_particles(enemy.rect.centerx, enemy.rect.centery, (255, 0, 0))
                 break
 
         if hasattr(enemy, 'projectiles'):
             for projectile in enemy.projectiles[:]:
                 if projectile["rect"].colliderect(player.rect):
-                    player.health -= 5
+                    # Trừ nửa cây máu nếu trúng kiếm (skeleton) hoặc ma thuật (ghost)
+                    if enemy.enemy_type in ["skeleton", "ghost"]:
+                        player.health -= 50
+                    else:
+                        player.health -= 5  # Các loại đạn khác (nếu có)
                     enemy.projectiles.remove(projectile)
                     if player.health <= 0:
                         running = False
+                        print("Người chơi đã bị hạ gục bởi đạn quái vật!")
                     break
 
     # Tính kích thước pixel của bản đồ
@@ -335,8 +340,7 @@ while running:
 
     # Hiển thị số đạn với hình hộp đạn
     screen.blit(ammo_box_image, (AMMO_ICON_X, AMMO_ICON_Y))
-    ammo_text = font.render(
-        f": {player.bullets}/{PLAYER_MAX_BULLETS}", True, BLACK)
+    ammo_text = font.render(f": {player.bullets}/{PLAYER_MAX_BULLETS}", True, BLACK)
     screen.blit(ammo_text, (AMMO_TEXT_X, AMMO_TEXT_Y))
 
     player.draw(screen, offset=offset)
@@ -346,6 +350,5 @@ while running:
         ammo_box.draw(screen, offset=offset)
 
     pygame.display.flip()
-    clock.tick(FPS)
 
 pygame.quit()

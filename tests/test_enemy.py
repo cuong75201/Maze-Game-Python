@@ -2,36 +2,37 @@ import pygame
 import random
 import math
 import sys
+from heapq import heappush, heappop
 
 class Enemy:
     ENEMY_TYPES = {
         "slime": {
             "image_path": "assets/images/enemy/slime_monster_preview.png",
-            "hp": 30,
+            "hp": 20,  # Giảm từ 40 xuống 20
             "speed": 42,
             "size": (21, 21)
         },
         "skeleton": {
             "image_path": "assets/images/enemy/skeleton.png",
-            "hp": 60,
+            "hp": 40,  # Giảm từ 80 xuống 40
             "speed": 56,
             "size": (32, 22)
         },
         "zombie": {
             "image_path": "assets/images/enemy/zombie.png",
-            "hp": 90,
+            "hp": 60,  # Giảm từ 120 xuống 60
             "speed": 56,
             "size": (28, 28)
         },
         "ghost": {
             "image_path": "assets/images/enemy/ghost.png",
-            "hp": 60,
+            "hp": 40,  # Giảm từ 80 xuống 40
             "speed": 35,
             "size": (25, 25)
         },
         "giant": {
             "image_path": "assets/images/enemy/giant.png",
-            "hp": 180,
+            "hp": 120,  # Giảm từ 240 xuống 120
             "speed": 14,
             "size": (42, 49)
         }
@@ -71,7 +72,7 @@ class Enemy:
             self.visibility_timer = pygame.time.get_ticks()
             self.visibility_interval = 5000
             self.magic_image = pygame.image.load("assets/images/enemy/magic.png").convert_alpha()
-            self.magic_image = pygame.transform.scale(self.magic_image, (20, 16))
+            self.magic_image = pygame.transform.scale(self.magic_image, (14, 14))
             self.projectiles = []
             self.last_attack = 0
             self.attack_delay = 3000
@@ -102,16 +103,25 @@ class Enemy:
 
         self.particles = []
 
+        self.last_move = 0
+        self.move_delay = 500
         self.maze_width = maze_width
         self.maze_height = maze_height
         self.maze = maze
-        self.vision_range = 16.5 * cell_size
+        self.vision_range = 33 * cell_size
         self.base_speed = self.speed
+        self.target_pos = None
+        self.current_grid_pos = (y, x)
+        self.path = []
 
-        # Biến để hỗ trợ patrol
-        self.patrol_direction = random.choice([(1, 0), (-1, 0), (0, 1), (0, -1)])  # Hướng ban đầu ngẫu nhiên
-        self.patrol_timer = 0
-        self.patrol_duration = random.randint(60, 120)  # Thời gian di chuyển theo một hướng (1-2 giây)
+        current_grid_x = int(self.rect.x // self.cell_size)
+        current_grid_y = int(self.rect.y // self.cell_size)
+        if (0 <= current_grid_y < self.maze_height and 0 <= current_grid_x < self.maze_width and
+                self.maze[current_grid_y][current_grid_x] == 1):
+            new_x, new_y = self.find_nearest_valid_position()
+            self.rect.x = new_x
+            self.rect.y = new_y
+            self.current_grid_pos = (int(new_y // self.cell_size), int(new_x // self.cell_size))
 
     def update_visibility(self):
         if self.enemy_type == "ghost":
@@ -190,12 +200,12 @@ class Enemy:
         if self.shockwave["lifetime"] <= 0:
             self.shockwave = None
 
-    def attack(self, player_rect):
+    def attack(self, player_pos):
         if self.enemy_type == "skeleton":
             current_time = pygame.time.get_ticks()
             if current_time - self.last_attack >= self.attack_delay:
-                dx = player_rect.centerx - self.rect.centerx
-                dy = player_rect.centery - self.rect.centery
+                dx = player_pos[1] * self.cell_size - self.rect.x
+                dy = player_pos[0] * self.cell_size - self.rect.y
                 distance = math.sqrt(dx**2 + dy**2)
                 if distance <= self.vision_range:
                     direction_x = dx / distance if distance != 0 else 0
@@ -213,8 +223,8 @@ class Enemy:
         elif self.enemy_type == "ghost" and self.is_visible:
             current_time = pygame.time.get_ticks()
             if current_time - self.last_attack >= self.attack_delay:
-                dx = player_rect.centerx - self.rect.centerx
-                dy = player_rect.centery - self.rect.centery
+                dx = player_pos[1] * self.cell_size - self.rect.x
+                dy = player_pos[0] * self.cell_size - self.rect.y
                 distance = math.sqrt(dx**2 + dy**2)
                 if distance <= self.vision_range:
                     direction_x = dx / distance if distance != 0 else 0
@@ -233,20 +243,102 @@ class Enemy:
     def update_projectiles(self):
         if self.enemy_type == "skeleton":
             for projectile in self.projectiles[:]:
-                projectile["rect"].x += projectile["direction"][0] * (projectile["speed"] * 1/60)
-                projectile["rect"].y += projectile["direction"][1] * (projectile["speed"] * 1/60)
+                projectile["rect"].x += projectile["direction"][0] * (projectile["speed"] / 60)
+                projectile["rect"].y += projectile["direction"][1] * (projectile["speed"] / 60)
                 projectile["rotation_angle"] += projectile["rotation_speed"]
                 if (projectile["rect"].x < 0 or projectile["rect"].x > 900 or
                     projectile["rect"].y < 0 or projectile["rect"].y > 900):
                     self.projectiles.remove(projectile)
         elif self.enemy_type == "ghost":
             for projectile in self.projectiles[:]:
-                projectile["rect"].x += projectile["direction"][0] * (projectile["speed"] * 1/60)
-                projectile["rect"].y += projectile["direction"][1] * (projectile["speed"] * 1/60)
+                projectile["rect"].x += projectile["direction"][0] * (projectile["speed"] / 60)
+                projectile["rect"].y += projectile["direction"][1] * (projectile["speed"] / 60)
                 projectile["rotation_angle"] += projectile["rotation_speed"]
                 if (projectile["rect"].x < 0 or projectile["rect"].x > 900 or
                     projectile["rect"].y < 0 or projectile["rect"].y > 900):
                     self.projectiles.remove(projectile)
+
+    def find_nearest_valid_position(self):
+        current_grid_x = int(self.rect.x // self.cell_size)
+        current_grid_y = int(self.rect.y // self.cell_size)
+        queue = [(current_grid_y, current_grid_x)]
+        visited = set()
+        visited.add((current_grid_y, current_grid_x))
+        directions = [(0, 1), (0, -1), (1, 0), (-1, 0)]
+
+        while queue:
+            y, x = queue.pop(0)
+            if (0 <= y < self.maze_height and 0 <= x < self.maze_width and
+                    self.maze[y][x] == 0):
+                return (x * self.cell_size, y * self.cell_size)
+            for dy, dx in directions:
+                next_y, next_x = y + dy, x + dx
+                if (0 <= next_y < self.maze_height and 0 <= next_x < self.maze_width and
+                        (next_y, next_x) not in visited):
+                    queue.append((next_y, next_x))
+                    visited.add((next_y, next_x))
+        print(f"Warning: Could not find a valid position for {self.enemy_type} at ({current_grid_x}, {current_grid_y})")
+        return (self.rect.x, self.rect.y)
+
+    def on_maze_changed(self):
+        self.target_pos = None
+        self.path = []
+        current_grid_x = int(self.rect.x // self.cell_size)
+        current_grid_y = int(self.rect.y // self.cell_size)
+        if (0 <= current_grid_y < self.maze_height and 0 <= current_grid_x < self.maze_width and
+                self.maze[current_grid_y][current_grid_x] == 1):
+            new_x, new_y = self.find_nearest_valid_position()
+            self.rect.x = new_x
+            self.rect.y = new_y
+            self.current_grid_pos = (int(new_y // self.cell_size), int(new_x // self.cell_size))
+
+    def a_star(self, start, goal):
+        open_set = []
+        heappush(open_set, (0, start))
+        g_score = {start: 0}
+        f_score = {start: self.manhattan_distance(start, goal)}
+        came_from = {}
+
+        closed_set = set()
+
+        while open_set:
+            current_f, current = heappop(open_set)
+
+            if current == goal:
+                path = []
+                while current in came_from:
+                    path.append(current)
+                    current = came_from[current]
+                path.append(start)
+                return path[::-1]
+
+            closed_set.add(current)
+
+            y, x = current
+            neighbors = [(y + dy, x + dx) for dy, dx in [(0, 1), (0, -1), (1, 0), (-1, 0)]]
+
+            for next_y, next_x in neighbors:
+                if not (0 <= next_y < self.maze_height and 0 <= next_x < self.maze_width):
+                    continue
+                if self.maze[next_y][next_x] == 1:
+                    continue
+                if (next_y, next_x) in closed_set:
+                    continue
+
+                tentative_g_score = g_score[current] + 1
+
+                if (next_y, next_x) not in g_score or tentative_g_score < g_score[(next_y, next_x)]:
+                    came_from[(next_y, next_x)] = current
+                    g_score[(next_y, next_x)] = tentative_g_score
+                    f_score[(next_y, next_x)] = tentative_g_score + self.manhattan_distance((next_y, next_x), goal)
+                    heappush(open_set, (f_score[(next_y, next_x)], (next_y, next_x)))
+
+        return []
+
+    def manhattan_distance(self, pos1, pos2):
+        y1, x1 = pos1
+        y2, x2 = pos2
+        return abs(x1 - x2) + abs(y1 - y2)
 
     def is_position_valid(self, x, y):
         grid_x = int(x // self.cell_size)
@@ -255,114 +347,154 @@ class Enemy:
             return False
         return self.maze[grid_y][grid_x] == 0
 
-    def on_maze_changed(self):
-        current_grid_x = int(self.rect.x // self.cell_size)
-        current_grid_y = int(self.rect.y // self.cell_size)
-        if (0 <= current_grid_y < self.maze_height and 0 <= current_grid_x < self.maze_width and
-                self.maze[current_grid_y][current_grid_x] == 1):
-            print(f"Enemy {self.enemy_type} stuck after maze change at ({self.rect.x}, {self.rect.y})")
+    def move(self, player_pos, player_rect):
+        current_time = pygame.time.get_ticks()
 
-    def move(self, player_pos, player_rect, dt=1/60):
-        # Tính khoảng cách trực tiếp bằng pixel (dùng player_rect thay vì player_pos)
-        dx = self.rect.centerx - player_rect.centerx
-        dy = self.rect.centery - player_rect.centery
+        dx = self.rect.x - (player_pos[1] * self.cell_size)
+        dy = self.rect.y - (player_pos[0] * self.cell_size)
         distance_to_player_px = math.sqrt(dx**2 + dy**2)
 
-        # Cập nhật trạng thái đuổi theo
         if distance_to_player_px <= self.vision_range:
             self.show_exclamation = True
-            self.speed = self.base_speed * 1.2  # Tốc độ khi đuổi theo
+            self.speed = self.base_speed * 2.4
+            self.move_delay = 60
         else:
             self.show_exclamation = False
             self.speed = self.base_speed
+            self.move_delay = 500
 
         self.update_visibility()
         self.update_bounce()
-        self.attack(player_rect)  # Sử dụng player_rect thay vì player_pos
+        self.attack(player_pos)
         self.stomp(player_pos)
         self.update_projectiles()
         self.update_particles()
         self.update_stomp_warning()
         self.update_shockwave()
 
-        # Logic di chuyển (chạy mỗi frame)
-        speed_per_frame = self.speed * dt  # Tốc độ mỗi frame, dựa trên dt
+        current_grid_x = int(self.rect.x // self.cell_size)
+        current_grid_y = int(self.rect.y // self.cell_size)
+        self.current_grid_pos = (current_grid_y, current_grid_x)
 
-        if distance_to_player_px <= self.vision_range:
-            # Đuổi theo người chơi: di chuyển trực tiếp về phía người chơi
-            if distance_to_player_px > 0:  # Chỉ cần đảm bảo không chia cho 0
-                # Chuẩn hóa vector hướng
-                direction_x = dx / distance_to_player_px
-                direction_y = dy / distance_to_player_px
+        if (0 <= current_grid_y < self.maze_height and 0 <= current_grid_x < self.maze_width and
+                self.maze[current_grid_y][current_grid_x] == 1):
+            new_x, new_y = self.find_nearest_valid_position()
+            self.rect.x = new_x
+            self.rect.y = new_y
+            self.current_grid_pos = (int(new_y // self.cell_size), int(new_x // self.cell_size))
+            self.target_pos = None
+            self.path = []
+            return
 
-                # Tính vị trí mới
-                new_x = self.rect.x - direction_x * speed_per_frame
-                new_y = self.rect.y - direction_y * speed_per_frame
+        if self.target_pos is None and current_time - self.last_move >= self.move_delay:
+            self.last_move = current_time
 
-                # Nếu rất gần người chơi, kiểm tra va chạm trực tiếp
-                temp_rect = self.rect.copy()
-                temp_rect.x = new_x
-                temp_rect.y = new_y
-                if temp_rect.colliderect(player_rect):
-                    # Nếu va chạm với người chơi, không cần di chuyển thêm
-                    # Va chạm sẽ được xử lý trong game.py
-                    pass
-                elif distance_to_player_px <= self.rect.width:  # Nếu rất gần (trong vòng 1 ô)
-                    # Di chuyển trực tiếp mà không kiểm tra tường
-                    self.rect.x = new_x
-                    self.rect.y = new_y
+            enemy_grid_pos = self.current_grid_pos
+
+            if distance_to_player_px <= self.vision_range:
+                self.path = self.a_star(enemy_grid_pos, player_pos)
+                if not self.path:
+                    directions = [(0, 1), (0, -1), (1, 0), (-1, 0)]
+                    random.shuffle(directions)
+                    moved = False
+                    new_grid_x, new_grid_y = enemy_grid_pos[1], enemy_grid_pos[0]
+                    for dx, dy in directions:
+                        next_x = enemy_grid_pos[1] + dx
+                        next_y = enemy_grid_pos[0] + dy
+                        if (0 <= next_y < self.maze_height and 0 <= next_x < self.maze_width and
+                                self.maze[next_y][next_x] == 0):
+                            new_grid_x, new_grid_y = next_x, next_y
+                            moved = True
+                            break
+                    if moved:
+                        self.path = [enemy_grid_pos, (new_grid_y, new_grid_x)]
+            else:
+                directions = [(0, 1), (0, -1), (1, 0), (-1, 0)]
+                random.shuffle(directions)
+                moved = False
+                new_grid_x, new_grid_y = enemy_grid_pos[1], enemy_grid_pos[0]
+
+                for dx, dy in directions:
+                    next_x = enemy_grid_pos[1] + dx
+                    next_y = enemy_grid_pos[0] + dy
+                    if (0 <= next_y < self.maze_height and 0 <= next_x < self.maze_width and
+                            self.maze[next_y][next_x] == 0):
+                        new_grid_x, new_grid_y = next_x, next_y
+                        moved = True
+                        break
+
+                if moved:
+                    self.path = [enemy_grid_pos, (new_grid_y, new_grid_x)]
                 else:
-                    # Kiểm tra vị trí mới có hợp lệ không
+                    self.path = []
+
+            if len(self.path) > 1:
+                next_pos = self.path[1]
+                self.target_pos = (next_pos[1] * self.cell_size, next_pos[0] * self.cell_size)
+            else:
+                self.target_pos = None
+                self.path = []
+
+        if self.target_pos:
+            dx = self.target_pos[0] - self.rect.x
+            dy = self.target_pos[1] - self.rect.y
+            distance = math.sqrt(dx**2 + dy**2)
+
+            if distance > 1:
+                speed_per_frame = self.speed / 60
+                if distance <= speed_per_frame:
+                    if self.is_position_valid(self.target_pos[0], self.target_pos[1]):
+                        self.rect.x = self.target_pos[0]
+                        self.rect.y = self.target_pos[1]
+                        self.current_grid_pos = (int(self.target_pos[1] // self.cell_size),
+                                                int(self.target_pos[0] // self.cell_size))
+                    else:
+                        self.target_pos = None
+                        self.path = []
+                        return
+                else:
+                    direction_x = dx / distance
+                    direction_y = dy / distance
+                    new_x = self.rect.x + direction_x * speed_per_frame
+                    new_y = self.rect.y + direction_y * speed_per_frame
+
                     if self.is_position_valid(new_x, new_y):
                         self.rect.x = new_x
                         self.rect.y = new_y
+                        self.current_grid_pos = (int(self.rect.y // self.cell_size),
+                                                int(self.rect.x // self.cell_size))
+                        if direction_x > 0:
+                            self.facing_right = True
+                            self.image = self.original_image
+                        elif direction_x < 0:
+                            self.facing_right = False
+                            self.image = pygame.transform.flip(self.original_image, True, False)
                     else:
-                        # Thử trượt dọc theo tường
-                        # Di chuyển theo trục x
-                        temp_x = self.rect.x - direction_x * speed_per_frame
-                        if self.is_position_valid(temp_x, self.rect.y):
-                            self.rect.x = temp_x
-                        # Di chuyển theo trục y
-                        temp_y = self.rect.y - direction_y * speed_per_frame
-                        if self.is_position_valid(self.rect.x, temp_y):
-                            self.rect.y = temp_y
-
-                # Cập nhật hướng quay mặt
-                if direction_x > 0:
-                    self.facing_right = False
-                    self.image = pygame.transform.flip(self.original_image, True, False)
-                elif direction_x < 0:
-                    self.facing_right = True
-                    self.image = self.original_image
-        else:
-            # Patrol: di chuyển qua lại
-            self.patrol_timer += 1
-            if self.patrol_timer >= self.patrol_duration:
-                # Chọn hướng mới ngẫu nhiên sau khi hết thời gian
-                self.patrol_direction = random.choice([(1, 0), (-1, 0), (0, 1), (0, -1)])
-                self.patrol_timer = 0
-                self.patrol_duration = random.randint(60, 120)
-
-            # Di chuyển theo hướng patrol
-            dx, dy = self.patrol_direction
-            new_x = self.rect.x + dx * speed_per_frame
-            new_y = self.rect.y + dy * speed_per_frame
-
-            # Kiểm tra vị trí mới có hợp lệ không
-            if self.is_position_valid(new_x, new_y):
-                self.rect.x = new_x
-                self.rect.y = new_y
-                # Cập nhật hướng quay mặt
-                if dx > 0:
-                    self.facing_right = True
-                    self.image = self.original_image
-                elif dx < 0:
-                    self.facing_right = False
-                    self.image = pygame.transform.flip(self.original_image, True, False)
+                        self.target_pos = None
+                        self.path = []
+                        new_x, new_y = self.find_nearest_valid_position()
+                        self.rect.x = new_x
+                        self.rect.y = new_y
+                        self.current_grid_pos = (int(new_y // self.cell_size), int(new_x // self.cell_size))
+                        return
             else:
-                # Nếu va chạm tường, đảo hướng patrol
-                self.patrol_direction = (-dx, -dy)
-                self.patrol_timer = 0  # Reset timer để tránh lặp lại ngay lập tức
+                if self.is_position_valid(self.target_pos[0], self.target_pos[1]):
+                    self.rect.x = self.target_pos[0]
+                    self.rect.y = self.target_pos[1]
+                    self.current_grid_pos = (int(self.target_pos[1] // self.cell_size),
+                                            int(self.target_pos[0] // self.cell_size))
+                else:
+                    self.target_pos = None
+                    self.path = []
+                    return
+
+            if abs(self.rect.x - self.target_pos[0]) < 1 and abs(self.rect.y - self.target_pos[1]) < 1:
+                self.target_pos = None
+                if self.path:
+                    self.path.pop(0)
+                if len(self.path) > 1:
+                    next_pos = self.path[1]
+                    self.target_pos = (next_pos[1] * self.cell_size, next_pos[0] * self.cell_size)
 
     def draw(self, screen, offset=(0, 0)):
         if self.is_visible:
