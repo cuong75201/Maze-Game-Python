@@ -51,7 +51,7 @@ class Maze:
         for loc in self.tilemap:
             tile = self.tilemap[loc]
             surf.blit(
-                pygame.transform.scale(self.game["assets"][tile['type']][tile['variant']], tile['scale']),
+                pygame.transform.scale(self.game.assets[tile['type']][tile['variant']], tile['scale']),
                 (
                     tile['pos'][0] * self.tile_size[0] - offset[0],
                     tile['pos'][1] * self.tile_size[1] - offset[1]
