@@ -1,9 +1,4 @@
 import pygame
-<<<<<<< HEAD
-
-from src.maze import Maze
-if __name__ == "__main__": Maze().run() 
-=======
 import sys
 from config import load_image, load_images
 from src.maze import Maze
@@ -259,4 +254,3 @@ class Game:
             self.clock.tick(60)
 
 Game().run()
->>>>>>> 130ef0fb5c8af9c64b8e44eb3f8ec940c4dd6523

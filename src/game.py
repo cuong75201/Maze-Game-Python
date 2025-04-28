@@ -81,7 +81,7 @@ game_assets = {
 }
 
 maze = Maze(game={"assets": game_assets}, tile_size=TILE_SIZE)
-maze.load("map1.json")
+maze.load("maps/map1.json")
 
 
 class AmmoBox:
