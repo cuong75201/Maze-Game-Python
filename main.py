@@ -20,7 +20,7 @@ class Game:
             'WallBreakable': load_images('level/WallBreakable'),
             'Earth': load_images('level/Earth')
         }
-        self.tilemap = Maze(self, (17, 12))
+        self.tilemap = Maze(self, (42, 30))
         try:
             self.tilemap.load('maps/map1.json')
         except FileNotFoundError:
@@ -29,7 +29,7 @@ class Game:
         self.tile_list = list(self.assets)
         self.tile_group = 0
         self.tile_variant = 0
-        self.tile_scale = (17, 12)
+        self.tile_scale = (42, 30)
         self.scale = self.tile_scale
         self.scroll = [0, 0]
 

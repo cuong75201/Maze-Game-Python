@@ -83,6 +83,35 @@ game_assets = {
 maze = Maze(game={"assets": game_assets}, tile_size=TILE_SIZE)
 maze.load("maps/map1.json")
 
+# Thêm biến đường dẫn ảnh chúc mừng
+CONGRATS_BG_PATH = os.path.join(ASSETS_DIR, "congratulations.png")  # Đặt tên file phù hợp với ảnh bạn lưu
+try:
+    congrats_bg = pygame.image.load(CONGRATS_BG_PATH)
+    congrats_bg = pygame.transform.scale(congrats_bg, (WIDTH, HEIGHT))
+except Exception:
+    congrats_bg = None
+
+# Load win animation frames cho phần kết thúc
+WIN_ANIMATION_FRAMES = []
+for i in range(17):
+    frame_path = os.path.join(ASSETS_DIR, "hero", "winA", f"hero_winA_{i:04d}.png")
+    try:
+        frame = pygame.image.load(frame_path).convert_alpha()
+        WIN_ANIMATION_FRAMES.append(frame)
+    except Exception:
+        pass
+
+# Load các frame của GIF Game Over (Hungry Game Over GIF by Ocean Park)
+GAME_OVER_GIF_FRAMES = []
+try:
+    import glob
+    gif_dir = os.path.join(ASSETS_DIR, "gameover_gif")  # Thư mục chứa các frame đã tách từ gif
+    gif_frame_paths = sorted(glob.glob(os.path.join(gif_dir, "*.png")))
+    for path in gif_frame_paths:
+        frame = pygame.image.load(path).convert_alpha()
+        GAME_OVER_GIF_FRAMES.append(frame)
+except Exception:
+    pass
 
 class AmmoBox:
     def __init__(self, x, y):
@@ -236,6 +265,22 @@ MAX_AMMO_BOXES = 20
 AMMO_BOX_SPAWN_CHANCE = 0.01
 PLAYER_MAX_BULLETS = 150
 
+# Thêm class hiển thị thông báo kết thúc
+class EndGameMessage:
+    def __init__(self, text, font, color=BLACK):
+        self.text = text
+        self.font = font
+        self.color = color
+        self.surface = self.font.render(self.text, True, self.color)
+        self.rect = self.surface.get_rect(center=(WIDTH // 2 + WIDTH // 4, HEIGHT // 2))
+
+    def draw(self, screen):
+        screen.blit(self.surface, self.rect)
+
+# Thêm biến lưu thời gian bắt đầu và số quái vật bị hạ
+start_ticks = pygame.time.get_ticks()
+kills = 0
+
 running = True
 while running:
     dt = clock.tick(FPS) / 1000  # Tính dt (thời gian giữa các frame, tính bằng giây)
@@ -254,6 +299,114 @@ while running:
     player_grid_x = player.rect.centerx // TILE_SIZE[0]
     player_grid_y = player.rect.centery // TILE_SIZE[1]
     player_pos = (player_grid_y, player_grid_x)
+
+    # Kiểm tra nếu player chạm vào ô groundExit
+    tile_key = f"{player_grid_x};{player_grid_y}"
+    if tile_key in maze.tilemap:
+        tile = maze.tilemap[tile_key]
+        # Kiểm tra nếu là groundExit (ô Earth thứ 2 trong assets)
+        if tile['type'] == 'Earth' and tile.get('variant', 0) == 1:
+            # Fade in hiệu ứng kết thúc (lâu hơn và nhân vật lớn hơn, dùng animation win)
+            fade_surface = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+            for alpha in range(0, 256, 4):
+                if congrats_bg:
+                    temp_bg = congrats_bg.copy()
+                    temp_bg.set_alpha(alpha)
+                    screen.blit(temp_bg, (0, 0))
+                else:
+                    fade_surface.fill((255, 255, 255, alpha))
+                    screen.blit(fade_surface, (0, 0))
+                # Animation nhân vật chiến thắng
+                frame_idx = (alpha // 8) % len(WIN_ANIMATION_FRAMES) if WIN_ANIMATION_FRAMES else 0
+                if WIN_ANIMATION_FRAMES:
+                    win_frame = pygame.transform.scale(WIN_ANIMATION_FRAMES[frame_idx], (180, 180))
+                    win_frame.set_alpha(alpha)
+                    player_img_rect = win_frame.get_rect()
+                    player_img_rect.center = (WIDTH // 2 + WIDTH // 4, HEIGHT // 2)
+                    screen.blit(win_frame, player_img_rect)
+                # Dòng chữ tiếng Anh bên dưới
+                end_message = EndGameMessage("Congratulations! You Win!", font)
+                end_message.surface.set_alpha(alpha)
+                end_message.rect.midtop = (WIDTH // 2 + WIDTH // 4, HEIGHT // 2 + 100)
+                end_message.draw(screen)
+                pygame.display.flip()
+                pygame.time.delay(30)
+            # Hiển thị màn hình kết thúc với animation cho đến khi người chơi nhấn phím hoặc đóng cửa sổ
+            waiting = True
+            anim_idx = 0
+            # Tính thời gian chơi
+            play_time = (pygame.time.get_ticks() - start_ticks) // 1000
+            minutes = play_time // 60
+            seconds = play_time % 60
+            # Chuẩn bị các thông tin
+            info_texts = [
+                f"Time: {minutes:02d}:{seconds:02d}",
+                f"Enemies Defeated: {kills}"
+            ]
+            info_surfaces = [font.render(text, True, (0,0,0)) for text in info_texts]
+            info_rects = [surf.get_rect(midtop=(WIDTH // 2 + WIDTH // 4, HEIGHT // 2 + 150 + i*50)) for i, surf in enumerate(info_surfaces)]
+            # Hiệu ứng xuất hiện từng dòng thông tin
+            for idx, (surf, rect) in enumerate(zip(info_surfaces, info_rects)):
+                for alpha in range(0, 256, 16):
+                    for event in pygame.event.get():
+                        if event.type == pygame.QUIT:
+                            waiting = False
+                            running = False
+                            break
+                    if congrats_bg:
+                        screen.blit(congrats_bg, (0, 0))
+                    else:
+                        screen.fill(WHITE)
+                    # Animation nhân vật chiến thắng (lặp)
+                    if WIN_ANIMATION_FRAMES:
+                        win_frame = pygame.transform.scale(WIN_ANIMATION_FRAMES[anim_idx % len(WIN_ANIMATION_FRAMES)], (180, 180))
+                        win_frame.set_alpha(255)
+                        player_img_rect = win_frame.get_rect()
+                        player_img_rect.center = (WIDTH // 2 + WIDTH // 4, HEIGHT // 2)
+                        screen.blit(win_frame, player_img_rect)
+                    # Dòng chữ chúc mừng
+                    end_message.surface.set_alpha(255)
+                    end_message.rect.midtop = (WIDTH // 2 + WIDTH // 4, HEIGHT // 2 + 100)
+                    end_message.draw(screen)
+                    # Dòng thông tin hiện tại
+                    temp_surf = surf.copy()
+                    temp_surf.set_alpha(alpha)
+                    screen.blit(temp_surf, rect)
+                    # Các dòng thông tin đã hiện trước đó
+                    for j in range(idx):
+                        screen.blit(info_surfaces[j], info_rects[j])
+                    pygame.display.flip()
+                    pygame.time.delay(40)
+            # Sau khi hiện xong, cho phép nhấn phím để thoát
+            while waiting:
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        waiting = False
+                        running = False
+                    if event.type == pygame.KEYDOWN or event.type == pygame.MOUSEBUTTONDOWN:
+                        waiting = False
+                if congrats_bg:
+                    screen.blit(congrats_bg, (0, 0))
+                else:
+                    screen.fill(WHITE)
+                # Animation nhân vật chiến thắng (lặp)
+                if WIN_ANIMATION_FRAMES:
+                    win_frame = pygame.transform.scale(WIN_ANIMATION_FRAMES[anim_idx % len(WIN_ANIMATION_FRAMES)], (180, 180))
+                    win_frame.set_alpha(255)
+                    player_img_rect = win_frame.get_rect()
+                    player_img_rect.center = (WIDTH // 2 + WIDTH // 4, HEIGHT // 2)
+                    screen.blit(win_frame, player_img_rect)
+                    anim_idx += 1
+                # Dòng chữ chúc mừng
+                end_message.surface.set_alpha(255)
+                end_message.rect.midtop = (WIDTH // 2 + WIDTH // 4, HEIGHT // 2 + 100)
+                end_message.draw(screen)
+                # Các dòng thông tin
+                for surf, rect in zip(info_surfaces, info_rects):
+                    screen.blit(surf, rect)
+                pygame.display.flip()
+                pygame.time.delay(80)
+            continue
 
     if len(ammo_boxes) < MAX_AMMO_BOXES and random.random() < AMMO_BOX_SPAWN_CHANCE:
         try:
@@ -286,11 +439,55 @@ while running:
         if enemy.is_visible and enemy.rect.colliderect(player.rect):
             player.health -= 50  # Trừ nửa cây máu (50 HP) khi quái vật chạm
             if player.health <= 0:
+                # Hiệu ứng Game Over bằng GIF
+                fade_surface = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+                # Fade in Game Over GIF
+                for alpha in range(0, 256, 8):
+                    if GAME_OVER_GIF_FRAMES:
+                        frame_idx = (alpha // 8) % len(GAME_OVER_GIF_FRAMES)
+                        gif_frame = pygame.transform.scale(GAME_OVER_GIF_FRAMES[frame_idx], (240, 240))
+                        gif_frame.set_alpha(alpha)
+                        gif_rect = gif_frame.get_rect(center=(WIDTH // 2, HEIGHT // 2 - 40))
+                        screen.fill((30, 30, 30))
+                        screen.blit(gif_frame, gif_rect)
+                    else:
+                        fade_surface.fill((0, 0, 0, alpha))
+                        screen.blit(fade_surface, (0, 0))
+                    # Dòng chữ Game Over
+                    go_font = pygame.font.SysFont('arialblack', 60)
+                    go_text = go_font.render("Game Over", True, (255, 0, 0))
+                    go_text.set_alpha(alpha)
+                    go_rect = go_text.get_rect(center=(WIDTH // 2, HEIGHT // 2 + 100))
+                    screen.blit(go_text, go_rect)
+                    pygame.display.flip()
+                    pygame.time.delay(30)
+                # Lặp animation cho đến khi nhấn phím hoặc đóng cửa sổ
+                waiting = True
+                anim_idx = 0
+                while waiting:
+                    for event in pygame.event.get():
+                        if event.type == pygame.QUIT:
+                            waiting = False
+                            running = False
+                        if event.type == pygame.KEYDOWN or event.type == pygame.MOUSEBUTTONDOWN:
+                            waiting = False
+                    screen.fill((30, 30, 30))
+                    if GAME_OVER_GIF_FRAMES:
+                        gif_frame = pygame.transform.scale(GAME_OVER_GIF_FRAMES[anim_idx % len(GAME_OVER_GIF_FRAMES)], (240, 240))
+                        gif_rect = gif_frame.get_rect(center=(WIDTH // 2, HEIGHT // 2 - 40))
+                        screen.blit(gif_frame, gif_rect)
+                        anim_idx += 1
+                    go_font = pygame.font.SysFont('arialblack', 60)
+                    go_text = go_font.render("Game Over", True, (255, 0, 0))
+                    go_rect = go_text.get_rect(center=(WIDTH // 2, HEIGHT // 2 + 100))
+                    screen.blit(go_text, go_rect)
+                    pygame.display.flip()
+                    pygame.time.delay(80)
                 running = False
                 print("Người chơi đã bị hạ gục!")
-            # Tạm dừng ngắn để tránh trừ máu liên tục
-            enemy.rect.x += (enemy.rect.centerx - player.rect.centerx) * 0.1
-            enemy.rect.y += (enemy.rect.centery - player.rect.centery) * 0.1
+                # Tạm dừng ngắn để tránh trừ máu liên tục
+                enemy.rect.x += (enemy.rect.centerx - player.rect.centerx) * 0.1
+                enemy.rect.y += (enemy.rect.centery - player.rect.centery) * 0.1
 
         for bullet in player.bullet_list[:]:
             if enemy.is_visible and bullet.rect.colliderect(enemy.rect):
@@ -300,6 +497,7 @@ while running:
                 if enemy.hp <= 0:
                     enemies.remove(enemy)
                     enemy.create_particles(enemy.rect.centerx, enemy.rect.centery, (255, 0, 0))
+                    kills += 1  # Tăng số quái vật bị hạ
                 break
 
         if hasattr(enemy, 'projectiles'):
