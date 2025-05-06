@@ -1,13 +1,13 @@
 # player.py
 import pygame
-from bullet import Bullet
-
+from .bullet import Bullet
 
 class Player:
     def __init__(self, x, y, maze=None, image_path=None):
         print(f"Khởi tạo Player tại vị trí ({x}, {y})")
 
         self.maze = maze
+        self.gun_shot_sound = None  # Sẽ được gán từ game.py
 
         self.walk_frames = {
             "right": [],
@@ -42,53 +42,50 @@ class Player:
         self.health_bar_offset = 10
 
     def load_walk_frames(self):
-        tile_width, tile_height = self.maze.tile_size
+        # Use a fixed size for the player, matching the HUD icon size in game.py
+        player_size = (50, 50)  # Consistent with player_icon size in game.py
         for i in range(16):
             walkA_path = f"assets/images/hero/walkA/hero_walkA_{str(i).zfill(4)}.png"
             try:
                 frame = pygame.image.load(walkA_path)
-                frame = pygame.transform.scale(
-                    frame, (tile_width, tile_height))
+                frame = pygame.transform.scale(frame, player_size)
                 self.walk_frames["down"].append(frame)
             except pygame.error as e:
                 print(f"Không thể tải frame {walkA_path}: {e}")
-                frame = pygame.Surface((tile_width, tile_height))
+                frame = pygame.Surface(player_size)
                 frame.fill((255, 255, 255))
                 self.walk_frames["down"].append(frame)
 
             walkB_path = f"assets/images/hero/walkB/hero_walkB_{str(i).zfill(4)}.png"
             try:
                 frame = pygame.image.load(walkB_path)
-                frame = pygame.transform.scale(
-                    frame, (tile_width, tile_height))
+                frame = pygame.transform.scale(frame, player_size)
                 self.walk_frames["right"].append(frame)
             except pygame.error as e:
                 print(f"Không thể tải frame {walkB_path}: {e}")
-                frame = pygame.Surface((tile_width, tile_height))
+                frame = pygame.Surface(player_size)
                 frame.fill((255, 255, 255))
                 self.walk_frames["right"].append(frame)
 
             walkC_path = f"assets/images/hero/walkC/hero_walkC_{str(i).zfill(4)}.png"
             try:
                 frame = pygame.image.load(walkC_path)
-                frame = pygame.transform.scale(
-                    frame, (tile_width, tile_height))
+                frame = pygame.transform.scale(frame, player_size)
                 self.walk_frames["up"].append(frame)
             except pygame.error as e:
                 print(f"Không thể tải frame {walkC_path}: {e}")
-                frame = pygame.Surface((tile_width, tile_height))
+                frame = pygame.Surface(player_size)
                 frame.fill((255, 255, 255))
                 self.walk_frames["up"].append(frame)
 
             walkD_path = f"assets/images/hero/walkD/hero_walkD_{str(i).zfill(4)}.png"
             try:
                 frame = pygame.image.load(walkD_path)
-                frame = pygame.transform.scale(
-                    frame, (tile_width, tile_height))
+                frame = pygame.transform.scale(frame, player_size)
                 self.walk_frames["left"].append(frame)
             except pygame.error as e:
                 print(f"Không thể tải frame {walkD_path}: {e}")
-                frame = pygame.Surface((tile_width, tile_height))
+                frame = pygame.Surface(player_size)
                 frame.fill((255, 255, 255))
                 self.walk_frames["left"].append(frame)
 
@@ -194,8 +191,7 @@ class Player:
             self.frame_index += current_animation_speed
             if self.frame_index >= len(self.walk_frames[self.direction]):
                 self.frame_index = 0
-            self.image = self.walk_frames[self.direction][int(
-                self.frame_index)]
+            self.image = self.walk_frames[self.direction][int(self.frame_index)]
         else:
             self.frame_index = 0
             self.image = self.walk_frames[self.direction][0]
@@ -215,11 +211,16 @@ class Player:
                 image_path="assets/images/bullet/bullet.png",
                 direction=self.direction,
                 maze=self.maze,
-                damage=4  # Đổi sát thương từ 10 thành 4
+                damage=4
             )
             self.bullet_list.append(bullet)
             self.bullets -= 1
             self.shoot_cooldown = 5
+            if self.gun_shot_sound:
+                self.gun_shot_sound.play()
+                print("Phát âm thanh súng khi bắn")
+            else:
+                print("Không thể phát âm thanh súng: gun_shot_sound là None")
 
     def update_bullets(self):
         for bullet in self.bullet_list[:]:
@@ -232,14 +233,12 @@ class Player:
         print(f"Nhặt thêm {amount} đạn. Tổng đạn: {self.bullets}")
 
     def draw(self, screen, offset=(0, 0)):
-        screen.blit(self.image, (self.rect.x -
-                    offset[0], self.rect.y - offset[1]))
+        screen.blit(self.image, (self.rect.x - offset[0], self.rect.y - offset[1]))
 
         if not self.is_rolling:
             health_ratio = self.health / self.max_health
             current_width = self.health_bar_width * health_ratio
-            health_bar_x = self.rect.centerx - \
-                self.health_bar_width // 2 - offset[0]
+            health_bar_x = self.rect.centerx - self.health_bar_width // 2 - offset[0]
             health_bar_y = self.rect.top - self.health_bar_offset - offset[1]
             pygame.draw.rect(screen, (255, 0, 0), (health_bar_x,
                              health_bar_y, current_width, self.health_bar_height))
