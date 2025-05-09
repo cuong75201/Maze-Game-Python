@@ -9,14 +9,13 @@ import random
 import math
 from config import config, load_config
 
-# Thêm thư mục gốc của dự án vào sys.path
 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if base_dir not in sys.path:
     sys.path.append(base_dir)
 
 def main():
     pygame.init()
-    pygame.mixer.init()  # Khởi tạo mixer để phát âm thanh
+    pygame.mixer.init()
     WIDTH, HEIGHT = 1000, 700
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
     pygame.display.set_caption("Maze Shooter Game")
@@ -24,29 +23,25 @@ def main():
     BLACK = (0, 0, 0)
     WHITE = (255, 255, 255)
 
-    # Tải cấu hình để lấy giá trị âm lượng
     load_config()
 
-    # Xác định đường dẫn cơ sở
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     ASSETS_DIR = os.path.join(BASE_DIR, "..", "assets")
     SOUND_DIR = os.path.join(ASSETS_DIR, "sounds")
 
-    # Tải nhạc nền
     background_music = None
     try:
         background_music = pygame.mixer.Sound(os.path.join(SOUND_DIR, "background_music.wav"))
-        background_music.set_volume(config.get('music_volume', 50) / 100.0)  # Chuyển đổi từ 0-100 sang 0.0-1.0
-        background_music.play(-1)  # Phát lặp vô hạn
+        background_music.set_volume(config.get('music_volume', 50) / 100.0)
+        background_music.play(-1)
         print("Đã tải và phát nhạc nền thành công")
     except pygame.error as e:
         print(f"Không thể tải nhạc nền: {e}")
 
-    # Tải âm thanh súng
     gun_shot_sound = None
     try:
         gun_shot_sound = pygame.mixer.Sound(os.path.join(SOUND_DIR, "gun_shot.wav"))
-        gun_shot_sound.set_volume(config.get('sfx_volume', 50) / 100.0)  # Chuyển đổi từ 0-100 sang 0.0-1.0
+        gun_shot_sound.set_volume(config.get('sfx_volume', 50) / 100.0)
         print("Đã tải âm thanh súng thành công")
     except pygame.error as e:
         print(f"Không thể tải âm thanh súng: {e}")
@@ -110,7 +105,11 @@ def main():
     }
 
     maze = Maze(game={"assets": game_assets}, tile_size=TILE_SIZE)
-    maze.load("maps/map1.json")
+    try:
+        maze.load("maps/map1.json")
+    except Exception as e:
+        print(f"Error loading map: {e}")
+        return
 
     CONGRATS_BG_PATH = os.path.join(ASSETS_DIR, "images", "congratulations.png")
     try:
@@ -156,10 +155,11 @@ def main():
                 tile_rect = pygame.Rect(
                     tile['pos'][0] * maze.tile_size[0],
                     tile['pos'][1] * maze.tile_size[1],
-                    maze.tile_size[0],
+                    tile.get('scale', maze.tile_size)[0],
                     tile.get('scale', maze.tile_size)[1]
                 )
                 if rect.colliderect(tile_rect):
+                    print(f"Invalid position ({x}, {y}) due to collision with tile at {tile['pos']}")
                     return False
         return True
 
@@ -205,6 +205,7 @@ def main():
                     break
 
             if not too_close:
+                print(f"Found valid position for spawn: ({pixel_x}, {pixel_y})")
                 return pixel_x, pixel_y
 
             attempts += 1
@@ -233,7 +234,7 @@ def main():
         player_x, player_y = maze.tile_size[0] * 1.5, maze.tile_size[1] * 1.5
 
     player = Player(player_x, player_y, maze=maze)
-    player.gun_shot_sound = gun_shot_sound  # Gán âm thanh súng cho Player
+    player.gun_shot_sound = gun_shot_sound
     if gun_shot_sound:
         print("Đã gán âm thanh súng cho player")
     else:
@@ -328,7 +329,7 @@ def main():
             tile = maze.tilemap[tile_key]
             if tile['type'] == 'Earth' and tile.get('variant', 0) == 1:
                 if background_music:
-                    background_music.stop()  # Dừng nhạc nền khi thắng
+                    background_music.stop()
                 fade_surface = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
                 for alpha in range(0, 256, 4):
                     if congrats_bg:
@@ -442,12 +443,11 @@ def main():
 
         for enemy in enemies[:]:
             enemy.move(player_pos, player.rect, dt)
-
             if enemy.is_visible and enemy.rect.colliderect(player.rect):
                 player.health -= 50
                 if player.health <= 0:
                     if background_music:
-                        background_music.stop()  # Dừng nhạc nền khi thua
+                        background_music.stop()
                     fade_surface = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
                     for alpha in range(0, 256, 8):
                         if GAME_OVER_GIF_FRAMES:
@@ -511,7 +511,7 @@ def main():
                         enemy.projectiles.remove(projectile)
                         if player.health <= 0:
                             if background_music:
-                                background_music.stop()  # Dừng nhạc nền khi thua
+                                background_music.stop()
                             running = False
                             print("Người chơi đã bị hạ gục bởi đạn quái vật!")
                         break
