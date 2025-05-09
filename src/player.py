@@ -15,7 +15,7 @@ class Player:
         self.load_walk_frames()
         self.image = self.walk_frames["right"][0]
         self.rect = self.image.get_rect(topleft=(x, y))
-        self.speed = 2
+        self.speed = 2.5
         self.bullets = 50
         self.bullet_list = []
         self.shoot_cooldown = 0
@@ -36,7 +36,7 @@ class Player:
         self.health_bar_offset = 8
 
     def load_walk_frames(self):
-        player_size = (24, 24)
+        player_size = (48, 48)
         for i in range(16):
             for direction, folder in [("down", "walkA"), ("right", "walkB"), ("up", "walkC"), ("left", "walkD")]:
                 frame_path = f"assets/images/hero/{folder}/hero_{folder}_{str(i).zfill(4)}.png"
@@ -72,11 +72,10 @@ class Player:
                     # Chỉ thêm các ô là tường vào danh sách kiểm tra va chạm
                     if tile['type'] in ["WallStone", "WallBreakable"]:
                         nearby_tiles.append(tile)
-                    else:
-                        print(f"Skipped tile at {tile_key}: type {tile['type']} (not a wall)")
+                    
+                        
 
-        if not nearby_tiles:
-            print(f"No walls near player at {rect.center}")
+        
         return nearby_tiles
 
     def move(self, keys):
@@ -93,57 +92,101 @@ class Player:
             self._roll()
             return
 
-        # Tính vị trí mới dựa trên phím bấm
-        moved = False
-        new_rect = self.rect.copy()
-        if keys[pygame.K_w] or keys[pygame.K_UP]:
-            new_rect.y -= self.speed
-            self.direction = "up"
-            moved = True
-        if keys[pygame.K_s] or keys[pygame.K_DOWN]:
-            new_rect.y += self.speed
-            self.direction = "down"
-            moved = True
-        if keys[pygame.K_a] or keys[pygame.K_LEFT]:
-            new_rect.x -= self.speed
-            self.direction = "left"
-            moved = True
-        if keys[pygame.K_d] or keys[pygame.K_RIGHT]:
-            new_rect.x += self.speed
-            self.direction = "right"
-            moved = True
+        def get_collision_rect(rect, direction):
+            shrink_w = 0.5  # Đủ nhỏ để len khe, nhưng không quá nhỏ
+            new_w = int(rect.width * shrink_w)
+            new_h = int(rect.height * 0.5)  # Gần bằng chiều cao thật
+            new_x = rect.centerx - new_w // 2
+            new_y = rect.bottom - new_h
+            return pygame.Rect(new_x, new_y, new_w, new_h)
 
-        # Kiểm tra va chạm nếu có di chuyển
-        if moved and self.maze:
-            can_move = True
-            nearby_tiles = self.get_nearby_tiles(new_rect)
+        moved = False
+        orig_rect = self.rect.copy()
+        new_rect = self.rect.copy()
+        # Ưu tiên hướng theo phím nhấn cuối cùng
+        direction_x = None
+        direction_y = None
+        if keys[pygame.K_a] or keys[pygame.K_LEFT]:
+            direction_x = "left"
+        if keys[pygame.K_d] or keys[pygame.K_RIGHT]:
+            direction_x = "right"
+        if keys[pygame.K_w] or keys[pygame.K_UP]:
+            direction_y = "up"
+        if keys[pygame.K_s] or keys[pygame.K_DOWN]:
+            direction_y = "down"
+        # Ưu tiên hướng vừa nhấn cuối cùng
+        last_dir = None
+        for event in pygame.event.get([pygame.KEYDOWN]):
+            if event.type == pygame.KEYDOWN:
+                if event.key in [pygame.K_a, pygame.K_LEFT]:
+                    last_dir = "left"
+                elif event.key in [pygame.K_d, pygame.K_RIGHT]:
+                    last_dir = "right"
+                elif event.key in [pygame.K_w, pygame.K_UP]:
+                    last_dir = "up"
+                elif event.key in [pygame.K_s, pygame.K_DOWN]:
+                    last_dir = "down"
+        if last_dir:
+            self.direction = last_dir
+        elif direction_x:
+            self.direction = direction_x
+        elif direction_y:
+            self.direction = direction_y
+
+        # Di chuyển trục X trước
+        if direction_x:
+            test_rect = self.rect.copy()
+            if direction_x == "left":
+                test_rect.x -= self.speed
+            elif direction_x == "right":
+                test_rect.x += self.speed
+            collision_rect = get_collision_rect(test_rect, direction_x)
+            can_move_x = True
+            nearby_tiles = self.get_nearby_tiles(collision_rect)
             for tile in nearby_tiles:
-                # Đảm bảo tile có dữ liệu hợp lệ
                 if not isinstance(tile['pos'], (list, tuple)) or len(tile['pos']) != 2:
-                    print(f"Invalid tile position: {tile['pos']} at {tile}, skipping collision")
                     continue
                 if 'scale' not in tile or not isinstance(tile['scale'], (list, tuple)) or len(tile['scale']) != 2:
-                    print(f"Invalid tile scale: {tile.get('scale')} at {tile}, using default {self.maze.tile_size}")
                     tile['scale'] = self.maze.tile_size
-
-                # Tạo hình chữ nhật cho ô để kiểm tra va chạm
                 tile_rect = pygame.Rect(
                     tile['pos'][0] * self.maze.tile_size[0],
                     tile['pos'][1] * self.maze.tile_size[1],
                     tile['scale'][0],
                     tile['scale'][1]
                 )
-                if new_rect.colliderect(tile_rect):
-                    can_move = False
-                    print(f"Collision detected with tile at {tile['pos']} (type: {tile['type']}, scale: {tile['scale']})")
-                    print(f"Player new_rect: {new_rect}, Tile rect: {tile_rect}")
+                if collision_rect.colliderect(tile_rect):
+                    can_move_x = False
                     break
-
-            if can_move:
-                self.rect = new_rect
-                print(f"Player moved to {self.rect.topleft}")
-            else:
-                print(f"Player blocked at {new_rect.topleft} due to collision")
+            if can_move_x:
+                self.rect.x = test_rect.x
+                moved = True
+        # Di chuyển trục Y sau
+        if direction_y:
+            test_rect = self.rect.copy()
+            if direction_y == "up":
+                test_rect.y -= self.speed
+            elif direction_y == "down":
+                test_rect.y += self.speed
+            collision_rect = get_collision_rect(test_rect, direction_y)
+            can_move_y = True
+            nearby_tiles = self.get_nearby_tiles(collision_rect)
+            for tile in nearby_tiles:
+                if not isinstance(tile['pos'], (list, tuple)) or len(tile['pos']) != 2:
+                    continue
+                if 'scale' not in tile or not isinstance(tile['scale'], (list, tuple)) or len(tile['scale']) != 2:
+                    tile['scale'] = self.maze.tile_size
+                tile_rect = pygame.Rect(
+                    tile['pos'][0] * self.maze.tile_size[0],
+                    tile['pos'][1] * self.maze.tile_size[1],
+                    tile['scale'][0],
+                    tile['scale'][1]
+                )
+                if collision_rect.colliderect(tile_rect):
+                    can_move_y = False
+                    break
+            if can_move_y:
+                self.rect.y = test_rect.y
+                moved = True
 
         self.is_moving = moved
         if moved:
@@ -160,9 +203,23 @@ class Player:
         elif self.direction == "right":
             new_rect.x += self.roll_speed
 
+        def get_collision_rect(rect, direction):
+            if direction in ["left", "right"]:
+                shrink_w = 0.6
+                shrink_h = 0.4
+            else:
+                shrink_w = 0.4
+                shrink_h = 0.6
+            new_w = int(rect.width * shrink_w)
+            new_h = int(rect.height * shrink_h)
+            new_x = rect.centerx - new_w // 2
+            new_y = rect.centery - new_h // 2
+            return pygame.Rect(new_x, new_y, new_w, new_h)
+
         can_roll = True
         if self.maze:
-            nearby_tiles = self.get_nearby_tiles(new_rect)
+            collision_rect = get_collision_rect(new_rect, self.direction)
+            nearby_tiles = self.get_nearby_tiles(collision_rect)
             for tile in nearby_tiles:
                 if not isinstance(tile['pos'], (list, tuple)) or len(tile['pos']) != 2:
                     print(f"Invalid tile position in roll: {tile['pos']} at {tile}, skipping collision")
@@ -177,10 +234,10 @@ class Player:
                     tile['scale'][0],
                     tile['scale'][1]
                 )
-                if new_rect.colliderect(tile_rect):
+                if collision_rect.colliderect(tile_rect):
                     can_roll = False
                     print(f"Roll collision with tile at {tile['pos']} (type: {tile['type']}, scale: {tile['scale']})")
-                    print(f"Player new_rect: {new_rect}, Tile rect: {tile_rect}")
+                    print(f"Player collision_rect: {collision_rect}, Tile rect: {tile_rect}")
                     break
 
         if can_roll:

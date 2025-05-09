@@ -78,6 +78,8 @@ class Menu:
             if self.background_music:
                 self.background_music.set_volume(config.get('music_volume', 50) / 100.0)
                 self.background_music.play(-1)
+            # Đảm bảo hiển thị được đặt lại sau khi trò chơi kết thúc
+            self.display = pygame.Surface((320, 240))
 
     def run(self):
         running = True
@@ -89,8 +91,6 @@ class Menu:
                 if self.button_click_sound:
                     self.button_click_sound.play()
                 self.start_game()
-                # Đảm bảo hiển thị được đặt lại sau khi trò chơi kết thúc
-                self.display = pygame.Surface((320, 240))
             
             if self.btn_opt.draw(self.display, self.screen):
                 if self.button_click_sound:

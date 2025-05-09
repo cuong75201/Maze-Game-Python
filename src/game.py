@@ -7,7 +7,9 @@ from src.enemy import Enemy
 from src.player import Player
 import random
 import math
-from config import config, load_config
+from config import config, load_config, save_config
+from src.button import Button
+from config import load_image
 
 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if base_dir not in sys.path:
@@ -24,6 +26,33 @@ def main():
     WHITE = (255, 255, 255)
 
     load_config()
+    game_speed = config.get('game_speed', 1)
+
+    # Thêm biến để lưu trạng thái tạm dừng
+    paused = False
+    pause_font = pygame.font.SysFont('arial', 60, bold=True)
+    pause_text = pause_font.render("PAUSED", True, BLACK)
+    pause_rect = pause_text.get_rect(center=(WIDTH//2, HEIGHT//2 - 100))
+    
+    # Tạo các nút menu đơn giản
+    menu_font = pygame.font.SysFont('arial', 40)
+    play_text = menu_font.render("Play", True, BLACK)
+    play_rect = play_text.get_rect(center=(WIDTH//2 - 100, HEIGHT//2))
+    options_text = menu_font.render("Options", True, BLACK)
+    options_rect = options_text.get_rect(center=(WIDTH//2 + 100, HEIGHT//2))
+    menu_text = menu_font.render("Menu", True, BLACK)
+    menu_rect = menu_text.get_rect(center=(WIDTH//2, HEIGHT//2 + 80))
+
+    # Lưu trạng thái game khi tạm dừng
+    game_state = {
+        'player_pos': None,
+        'player_health': None,
+        'player_bullets': None,
+        'enemies': None,
+        'ammo_boxes': None,
+        'kills': None,
+        'start_ticks': None
+    }
 
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     ASSETS_DIR = os.path.join(BASE_DIR, "..", "assets")
@@ -34,7 +63,6 @@ def main():
         background_music = pygame.mixer.Sound(os.path.join(SOUND_DIR, "background_music.wav"))
         background_music.set_volume(config.get('music_volume', 50) / 100.0)
         background_music.play(-1)
-        print("Đã tải và phát nhạc nền thành công")
     except pygame.error as e:
         print(f"Không thể tải nhạc nền: {e}")
 
@@ -42,7 +70,6 @@ def main():
     try:
         gun_shot_sound = pygame.mixer.Sound(os.path.join(SOUND_DIR, "gun_shot.wav"))
         gun_shot_sound.set_volume(config.get('sfx_volume', 50) / 100.0)
-        print("Đã tải âm thanh súng thành công")
     except pygame.error as e:
         print(f"Không thể tải âm thanh súng: {e}")
 
@@ -81,7 +108,7 @@ def main():
     clock = pygame.time.Clock()
     FPS = 60
 
-    TILE_SIZE = (17, 12)
+    TILE_SIZE = (34, 24)
 
     game_assets = {
         "WallStone": [
@@ -106,7 +133,7 @@ def main():
 
     maze = Maze(game={"assets": game_assets}, tile_size=TILE_SIZE)
     try:
-        maze.load("maps/map1.json")
+        maze.load("maps/map1_scaled.json")
     except Exception as e:
         print(f"Error loading map: {e}")
         return
@@ -235,6 +262,8 @@ def main():
 
     player = Player(player_x, player_y, maze=maze)
     player.gun_shot_sound = gun_shot_sound
+    player.speed *= game_speed
+    player.roll_speed *= game_speed
     if gun_shot_sound:
         print("Đã gán âm thanh súng cho player")
     else:
@@ -281,6 +310,8 @@ def main():
                 maze=maze_grid,
                 enemy_type=enemy_type
             )
+            enemy.speed *= game_speed
+            enemy.base_speed *= game_speed
             enemies.append(enemy)
             print(f"Đã đặt {enemy_type} tại vị trí ({enemy_x}, {enemy_y})")
         except ValueError as e:
@@ -312,13 +343,106 @@ def main():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    paused = not paused
+                    if paused:
+                        # Lưu trạng thái game khi tạm dừng
+                        game_state['player_pos'] = (player.rect.x, player.rect.y)
+                        game_state['player_health'] = player.health
+                        game_state['player_bullets'] = player.bullets
+                        game_state['enemies'] = [(e.rect.x, e.rect.y, e.enemy_type, e.hp) for e in enemies]
+                        game_state['ammo_boxes'] = [(a.rect.x, a.rect.y) for a in ammo_boxes]
+                        game_state['kills'] = kills
+                        game_state['start_ticks'] = pygame.time.get_ticks() - start_ticks
+                    else:
+                        # Khôi phục trạng thái game khi tiếp tục
+                        if game_state['player_pos']:
+                            player.rect.x, player.rect.y = game_state['player_pos']
+                            player.health = game_state['player_health']
+                            player.bullets = game_state['player_bullets']
+                            enemies.clear()
+                            for e_x, e_y, e_type, e_hp in game_state['enemies']:
+                                enemy = Enemy(
+                                    x=e_x // TILE_SIZE[0],
+                                    y=e_y // TILE_SIZE[1],
+                                    cell_size=TILE_SIZE[0],
+                                    maze_width=maze_width,
+                                    maze_height=maze_height,
+                                    maze=maze_grid,
+                                    enemy_type=e_type
+                                )
+                                enemy.rect.x = e_x
+                                enemy.rect.y = e_y
+                                enemy.hp = e_hp
+                                enemy.speed *= game_speed
+                                enemy.base_speed *= game_speed
+                                enemies.append(enemy)
+                            ammo_boxes.clear()
+                            for a_x, a_y in game_state['ammo_boxes']:
+                                ammo_box = AmmoBox(a_x, a_y)
+                                ammo_boxes.append(ammo_box)
+                            kills = game_state['kills']
+                            start_ticks = pygame.time.get_ticks() - game_state['start_ticks']
+            elif event.type == pygame.MOUSEBUTTONDOWN and paused:
+                mouse_pos = pygame.mouse.get_pos()
+                if play_rect.collidepoint(mouse_pos):
+                    paused = False
+                    # Khôi phục trạng thái game
+                    if game_state['player_pos']:
+                        player.rect.x, player.rect.y = game_state['player_pos']
+                        player.health = game_state['player_health']
+                        player.bullets = game_state['player_bullets']
+                        enemies.clear()
+                        for e_x, e_y, e_type, e_hp in game_state['enemies']:
+                            enemy = Enemy(
+                                x=e_x // TILE_SIZE[0],
+                                y=e_y // TILE_SIZE[1],
+                                cell_size=TILE_SIZE[0],
+                                maze_width=maze_width,
+                                maze_height=maze_height,
+                                maze=maze_grid,
+                                enemy_type=e_type
+                            )
+                            enemy.rect.x = e_x
+                            enemy.rect.y = e_y
+                            enemy.hp = e_hp
+                            enemy.speed *= game_speed
+                            enemy.base_speed *= game_speed
+                            enemies.append(enemy)
+                        ammo_boxes.clear()
+                        for a_x, a_y in game_state['ammo_boxes']:
+                            ammo_box = AmmoBox(a_x, a_y)
+                            ammo_boxes.append(ammo_box)
+                        kills = game_state['kills']
+                        start_ticks = pygame.time.get_ticks() - game_state['start_ticks']
+                elif options_rect.collidepoint(mouse_pos):
+                    # Mở menu tùy chọn
+                    from src.options import OptionsMenu
+                    options_menu = OptionsMenu(config)
+                    options_menu.run()
+                    # Lưu các thay đổi cấu hình
+                    save_config()
+                    load_config()
+                    # Cập nhật âm lượng
+                    if background_music:
+                        background_music.set_volume(config.get('music_volume', 50) / 100.0)
+                    if gun_shot_sound:
+                        gun_shot_sound.set_volume(config.get('sfx_volume', 50) / 100.0)
+                elif menu_rect.collidepoint(mouse_pos):
+                    # Dừng nhạc nền
+                    if background_music:
+                        background_music.stop()
+                    # Quay về menu chính
+                    return
 
-        keys = pygame.key.get_pressed()
-        player.move(keys)
-        if keys[pygame.K_SPACE]:
-            player.shoot()
+        if not paused:
+            keys = pygame.key.get_pressed()
+            player.move(keys)
+            if keys[pygame.K_SPACE]:
+                player.shoot()
 
-        player.update_bullets()
+            player.update_bullets()
 
         player_grid_x = player.rect.centerx // TILE_SIZE[0]
         player_grid_y = player.rect.centery // TILE_SIZE[1]
@@ -369,7 +493,6 @@ def main():
                             if event.type == pygame.QUIT:
                                 waiting = False
                                 running = False
-                                break
                         if congrats_bg:
                             screen.blit(congrats_bg, (0, 0))
                         else:
@@ -543,6 +666,22 @@ def main():
             enemy.draw(screen, offset=offset)
         for ammo_box in ammo_boxes:
             ammo_box.draw(screen, offset=offset)
+
+        # Hiển thị màn hình tạm dừng
+        if paused:
+            # Tạo surface bán trong suốt
+            pause_surface = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+            pause_surface.fill((255, 255, 255, 128))
+            screen.blit(pause_surface, (0, 0))
+            screen.blit(pause_text, pause_rect)
+            
+            # Vẽ các nút menu
+            pygame.draw.rect(screen, (200, 200, 200), play_rect.inflate(20, 10))
+            pygame.draw.rect(screen, (200, 200, 200), options_rect.inflate(20, 10))
+            pygame.draw.rect(screen, (200, 200, 200), menu_rect.inflate(20, 10))
+            screen.blit(play_text, play_rect)
+            screen.blit(options_text, options_rect)
+            screen.blit(menu_text, menu_rect)
 
         pygame.display.flip()
 

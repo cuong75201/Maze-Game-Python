@@ -15,7 +15,7 @@ class Bullet:
 
         self.rect = self.image.get_rect(center=(x, y))
         self.direction = direction
-        self.speed = 10
+        self.speed = 15
         self.maze = maze
         self.damage = damage
 

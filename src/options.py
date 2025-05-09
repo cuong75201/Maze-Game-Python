@@ -16,7 +16,7 @@ class OptionsMenu:
     def __init__(self, config):
         pygame.init()
         self.screen = pygame.display.set_mode((960, 720))
-        pygame.display.set_caption("Options")
+        pygame.display.set_caption("Maze Shooter Game")
         self.clock = pygame.time.Clock()
         self.font = pygame.font.SysFont('arial', 40, bold=True)
         self.config = config
