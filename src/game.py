@@ -232,7 +232,7 @@ maze_grid, maze_width, maze_height = convert_tilemap_to_maze(maze)
 enemies = []
 occupied_positions = []
 
-enemy_list = ["slime", "slime", "slime", "slime", "skeleton", "skeleton", "zombie", "zombie", "ghost", "ghost", "giant"]
+enemy_list = ["slime", "slime", "slime", "slime", "skeleton", "skeleton", "skeleton", "zombie", "zombie", "zombie", "zombie", "ghost", "ghost", "ghost", "giant", "giant", "giant"]
 
 for enemy_type in enemy_list:
     try:
